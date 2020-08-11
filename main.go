@@ -1,7 +1,8 @@
 package main
 
 import (
-	"auth/model"
+	"auth/policy"
+	"auth/policy/v1"
 	"encoding/json"
 	"fmt"
 	_ "github.com/go-sql-driver/mysql"
@@ -10,8 +11,8 @@ import (
 )
 
 func main() {
-	model.Init()
-	p := model.Policy{}
+	policy.Init()
+	p := v1.Policy{}
 	// policys := "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Action\":[\"s3:ListBucket\"],\"Effect\":\"Allow\",\"Resource\":[\"arn:aws:s3:::personal-files\"],\"Condition\":{\"StringLike\":{\"s3:prefix\":[\"tyrchen/*\"]}}},{\"Action\":[\"s3:GetObject\",\"s3:PutObject\"],\"Effect\":\"Allow\",\"Resource\":[\"arn:aws:s3:::personal-files/tyrchen/*\"]}]}"
 	policys := "{\"Version\":\"1\",\"Statement\":[{\"Effect\":\"allow\",\"Action\":[\"tcd:ListS2Vm\"],\"Resource\":[\"tcd:server:*:$tenantId:vm/s2/*\"]},{\"Effect\":\"allow\",\"Action\":[\"tcd:ListS3Vm\"],\"Resource\":[\"tcd:server:*:$tenantId:vm/s2/*\"]},{\"Effect\":\"allow\",\"Action\":[\"tcd:createS2Vm\"],\"Resource\":[\"tcd:server:*:$tenantId:vm/s2\"]},{\"Effect\":\"allow\",\"Action\":[\"tcd:createS3Vm\"],\"Resource\":[\"tcd:server:*:$tenantId:vm/s3\"]}]}"
 	policys = "{\"Version\":\"1\",\"Statements\":[{\"Effect\":\"allow\",\"Action\":[\"tcd:describeS2Vm\",\"tcd:ListS2Vm\",\"tcd:startS2Vm\",\"tcd:stopS2Vm\",\"tcd:rebootS2Vm\"],\"Resource\":[\"tcd:server:*:$tenantId:vm/s2/*\"]}]}"
@@ -29,14 +30,14 @@ func main() {
 	// model.SavePolicy(&p)
 	// policy := mysqlTableTest()
 	ids := []int{37453, 37454, 6}
-	policy := model.QueryPolicyByIdsAndActions(ids, []string{"tcd:ListS3Vm"})
-	check := model.PolicyCheck{
+	policy := policy.QueryPolicyByIdsAndActions(ids, []string{"tcd:ListS3Vm"})
+	check := policy.PolicyCheck{
 		Policys: *policy,
 		Context: map[string]interface{}{
 			"tenantId": 11,
 			"user":     "mannix",
 		},
-		Resource: model.QueryResource{
+		Resource: policy.QueryResource{
 			Resource: "tcd:server:*:10:vm/s3",
 		},
 	}
@@ -45,6 +46,6 @@ func main() {
 	fmt.Println(policy)
 }
 
-func mysqlTableTest() *model.Policy {
-	return model.QueryPolicy(4)
+func mysqlTableTest() *v1.Policy {
+	return policy.QueryPolicy(4)
 }

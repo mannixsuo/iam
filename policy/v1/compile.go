@@ -6,7 +6,7 @@ import (
 	"strconv"
 )
 
-// compile 根据表达式和context 来计算结果
+// Compile 根据表达式和context 来计算结果
 // example:
 // context:
 //{
@@ -28,14 +28,14 @@ import (
 // {$.user.age}=1
 // {$.resource.owner}="tomMather"
 
-// a . b, a[b]
+// a . b, a[b], a[b:c]
 type op uint
 
 const (
 	value op = iota //a.b 某个对象的属性
 	split           //a[b:c] 切片
 	index           //a[b] list中的某个对象
-	scan            //a[*] 所有对象
+	scan            //todo a[*] 所有对象
 )
 
 type step struct {
@@ -44,11 +44,11 @@ type step struct {
 	args []interface{}
 }
 
-type compiled struct {
+type Compiled struct {
 	steps []*step
 }
 
-func (c *compiled) lookup(context interface{}) (interface{}, error) {
+func (c *Compiled) Lookup(context interface{}) (interface{}, error) {
 	for _, s := range c.steps {
 		var err error = nil
 		if s.op == value {
@@ -71,18 +71,20 @@ func getIndex(c interface{}, s *step) (interface{}, error) {
 	cv := reflect.ValueOf(c)
 	switch cv.Kind() {
 	case reflect.Array:
-		return cv.Index(s.args[0].(int)), nil
+		return cv.Index(s.args[0].(int)).Interface(), nil
 	case reflect.Slice:
 		if len(s.args) > 1 {
-			return cv.Slice(s.args[0].(int), s.args[1].(int)), nil
+			return cv.Slice(s.args[0].(int), s.args[1].(int)).Interface(), nil
 		}
-		return cv.Index(s.args[0].(int)), nil
+		return cv.Index(s.args[0].(int)).Interface(), nil
 	case reflect.Ptr:
 		return getIndex(c, s)
 	}
 	return nil, fmt.Errorf("can't get value %s from Kind %s", s.key, cv.Kind().String())
 }
 
+//如果c是map,s.key作为map的key来获取值
+//如果c是结构体,s.key作为结构体属性名称或者属性的json tag定义的名称来取值
 func getValue(c interface{}, s *step) (interface{}, error) {
 	cv := reflect.ValueOf(c)
 	switch cv.Kind() {
@@ -90,14 +92,32 @@ func getValue(c interface{}, s *step) (interface{}, error) {
 		jsonMap := c.(map[string]interface{})
 		return jsonMap[s.key], nil
 	case reflect.Struct:
-		return cv.FieldByName(s.key).Interface(), nil
+		tag, err := getStructFileByFiledNameOrJsonTag(s.key, reflect.TypeOf(c))
+		if err != nil {
+			return nil, err
+		}
+		return cv.FieldByName(tag).Interface(), nil
 	case reflect.Ptr:
 		return getValue(cv.Elem().Interface(), s)
 	}
 	return nil, fmt.Errorf("can't get value %s from Kind %s", s.key, cv.Kind().String())
 }
 
-func compile(exp string) (*compiled, error) {
+func getStructFileByFiledNameOrJsonTag(n string, t reflect.Type) (string, error) {
+	// 首先根据名称查找
+	if field, find := t.FieldByName(n); find {
+		return field.Name, nil
+	}
+	// 根据json tag查找
+	for i := 0; i < t.NumField(); i++ {
+		if v, ok := t.Field(i).Tag.Lookup("json"); ok && v == n {
+			return t.Field(i).Name, nil
+		}
+	}
+	return "", fmt.Errorf("can't find %s in struct %+v", n, t)
+}
+
+func Compile(exp string) (*Compiled, error) {
 	sequence, err := tokenize(exp)
 	if err != nil {
 		return nil, err
@@ -145,7 +165,7 @@ func compile(exp string) (*compiled, error) {
 		}
 		steps = append(steps, &s)
 	}
-	return &compiled{steps: steps}, nil
+	return &Compiled{steps: steps}, nil
 }
 
 // $ .a .b [1] . c
@@ -153,22 +173,22 @@ func tokenize(exp string) (*tokenSequence, error) {
 	if exp[0] != '$' {
 		return nil, fmt.Errorf("expression parser error: %s.expression should start with $", exp)
 	}
-	split := tokenSplit{defaultTokenSplits}
+	split := TokenSplit{Splits: defaultTokenSplits, SaveToken: true}
 
-	sequence := tokenSequence{tokens: split.split2tokens(exp)}
+	sequence := tokenSequence{tokens: split.Split2tokens(exp)}
 
 	return &sequence, nil
 }
 
 // $ . a . b [ 1 ] . c
 type tokenSequence struct {
-	tokens tokens //["$",".","a",".","b","[","1","]",".","c"]
+	tokens Tokens //["$",".","a",".","b","[","1","]",".","c"]
 	cIndex int    //当前指针所在位置
 }
 
-type tokens []string
+type Tokens []string
 
-func (t *tokens) append(s string) {
+func (t *Tokens) append(s string) {
 	if s != "" {
 		*t = append(*t, s)
 	}
@@ -176,14 +196,15 @@ func (t *tokens) append(s string) {
 
 var defaultTokenSplits = []byte{byte('.'), byte('['), byte(']'), byte(':')}
 
-// 根据 splits 来分割字符串
-type tokenSplit struct {
-	splits []byte
+// 根据 Splits 来分割字符串
+type TokenSplit struct {
+	Splits    []byte
+	SaveToken bool //是否将分隔符也保存
 }
 
 // 判断是否分割
-func (t *tokenSplit) shouldSplit(c byte) bool {
-	for _, s := range t.splits {
+func (t *TokenSplit) shouldSplit(c byte) bool {
+	for _, s := range t.Splits {
 		if s == c {
 			return true
 		}
@@ -191,14 +212,16 @@ func (t *tokenSplit) shouldSplit(c byte) bool {
 	return false
 }
 
-func (t *tokenSplit) split2tokens(exp string) tokens {
+func (t *TokenSplit) Split2tokens(exp string) Tokens {
 	var currentToken []byte
-	var token = tokens{}
+	var token = Tokens{}
 	for _, b := range []byte(exp) {
 		if t.shouldSplit(b) {
 			// 保存分隔符前的token,以及分割符
 			token.append(string(currentToken))
-			token.append(string(b))
+			if t.SaveToken {
+				token.append(string(b))
+			}
 			currentToken = make([]byte, 0)
 			continue
 		}

@@ -1,6 +1,9 @@
 package policy
 
-import "auth/auth"
+import (
+	"auth/auth"
+	"auth/policy/v1/statement"
+)
 
 //policy  = {
 //     <version_block>,
@@ -54,12 +57,39 @@ func (p *Policy) MatchContext(c *auth.Context) {
 
 // matchContextAction 判断policy的action 是否包含context中的 action
 func (p *Policy) matchContextAction(c *auth.Context) bool {
-	return false
+	action := p.getAction()
+	if action == nil {
+		return false
+	}
+	match, _ := action.Match(c)
+	return match
 }
 
 // matchContextResource 判断policy的resource 是否包含context中的 resource
 func (p *Policy) matchContextResource(c *auth.Context) bool {
-	return false
+	resources := p.getResources()
+	match, _ := resources.Match(c)
+	return match
 }
 
-func (p *Policy) Evaluate() {}
+func (p *Policy) Evaluate(c *auth.Context) {
+
+}
+
+func (p *Policy) getAction() *statement.Action {
+	for _, s := range p.Statement {
+		if s.StatementType() == ActionStatement {
+			return s.(*statement.Action)
+		}
+	}
+	return nil
+}
+
+func (p *Policy) getResources() *statement.Resource {
+	for _, r := range p.Statement {
+		if r.StatementType() == ResourceStatement {
+			return r.(*statement.Resource)
+		}
+	}
+	return nil
+}

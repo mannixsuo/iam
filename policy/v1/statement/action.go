@@ -17,7 +17,7 @@ func (a *Action) StatementType() policy.StatementType {
 const allToken = "*"
 
 //All 判断这个action是不是所有类型的action
-func (a *Action) All() bool {
+func (a *Action) all() bool {
 	if v, ok := a.Action.(string); ok {
 		if v == allToken {
 			return true
@@ -26,8 +26,8 @@ func (a *Action) All() bool {
 	return false
 }
 
-func (a *Action) ActionList() (*[]string, error) {
-	if a.All() {
+func (a *Action) actionList() (*[]string, error) {
+	if a.all() {
 		return nil, errors.New("this action represents all action")
 	}
 	if strings, ok := a.Action.([]interface{}); ok {
@@ -44,15 +44,23 @@ func (a *Action) ActionList() (*[]string, error) {
 	return nil, errors.New("format error Action = * | [action_string,]")
 }
 
-func (a *Action) MatchContext(c *auth.Context) (bool, error) {
-	if a.All() {
+// 对比该action能否与context中的action匹配
+func (a *Action) Match(c *auth.Context) (bool, error) {
+	if a.all() {
 		return true, nil
 	}
-	actionList, err := a.ActionList()
+	actionList, err := a.actionList()
 	if err != nil {
 		return false, err
 	}
 	for _, action := range *actionList {
-
+		if action == c.Action {
+			return true, nil
+		}
 	}
+	return false, nil
+}
+
+func (a *Action) Evaluate(c *auth.Context) {
+
 }

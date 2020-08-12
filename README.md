@@ -42,6 +42,6 @@ Zelkova translates policies into precise mathematical language and then uses aut
   1. 角色 增删改
   2. 用户信息操作
   3. 用户权限判断
-    1. 实现 `.` 语法
+    1. 实现 `.`,`a[b]`,`a[b:c]` 语法
   4. 策略(policy)操作
   5. 角色和策略绑定解绑

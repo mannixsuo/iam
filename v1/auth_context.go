@@ -1,4 +1,4 @@
-package auth
+package v1
 
 // Context 代表 who want do what to which resources.
 type Context struct {

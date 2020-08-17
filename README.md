@@ -45,3 +45,21 @@ Zelkova translates policies into precise mathematical language and then uses aut
     1. 实现 `.`,`a[b]`,`a[b:c]` 语法
   4. 策略(policy)操作
   5. 角色和策略绑定解绑
+  
+  
+```json
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": [
+                "s3:*",
+                "cloudwatch:*",
+                "ec2:*"
+            ],
+            "Resource": "*"
+        }
+    ]
+}
+```

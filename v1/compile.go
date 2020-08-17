@@ -6,7 +6,7 @@ import (
 	"strconv"
 )
 
-// Compile 根据表达式和context 来计算结果
+// compile 根据表达式和context 来计算结果
 // example:
 // context:
 //{
@@ -44,14 +44,20 @@ type step struct {
 	args []interface{}
 }
 
-type Compiled struct {
+type compiled struct {
 	steps []*step
 }
 
-func (c *Compiled) Lookup(context interface{}) (interface{}, error) {
+func (c *compiled) lookup(context interface{}) (interface{}, error) {
+	var sc bool
 	for _, s := range c.steps {
 		var err error = nil
 		if s.op == value {
+			// a[*].b
+			if sc {
+				context, err = getScanValues(context, s)
+				continue
+			}
 			context, err = getValue(context, s)
 			if err != nil {
 				return nil, err
@@ -63,8 +69,41 @@ func (c *Compiled) Lookup(context interface{}) (interface{}, error) {
 				return nil, err
 			}
 		}
+		if s.op == scan {
+			context, err = getScanValue(context, s)
+			if err != nil {
+				return nil, err
+			}
+			sc = true
+		}
 	}
 	return context, nil
+}
+func getScanValues(c interface{}, s *step) (interface{}, error) {
+	var vs []interface{}
+	cv := reflect.ValueOf(c)
+	switch cv.Kind() {
+	case reflect.Array, reflect.Slice:
+		for i := 0; i < cv.Len(); i++ {
+			i2, err := getValue(cv.Index(i).Interface(), s)
+			if err != nil {
+				return nil, err
+			}
+			vs = append(vs, i2)
+		}
+		return vs, nil
+	}
+	return nil, fmt.Errorf("cant get [*].%s from %s ", s.args[0], c)
+}
+func getScanValue(c interface{}, s *step) (interface{}, error) {
+	cv := reflect.ValueOf(c)
+	switch cv.Kind() {
+	case reflect.Slice:
+		return cv.Interface(), nil
+	case reflect.Array:
+		return cv.Interface(), nil
+	}
+	return nil, fmt.Errorf("not array or slice")
 }
 
 func getIndex(c interface{}, s *step) (interface{}, error) {
@@ -117,7 +156,7 @@ func getStructFileByFiledNameOrJsonTag(n string, t reflect.Type) (string, error)
 	return "", fmt.Errorf("can't find %s in struct %+v", n, t)
 }
 
-func Compile(exp string) (*Compiled, error) {
+func compile(exp string) (*compiled, error) {
 	sequence, err := tokenize(exp)
 	if err != nil {
 		return nil, err
@@ -138,13 +177,13 @@ func Compile(exp string) (*Compiled, error) {
 		if token == "[" {
 			// [a
 			p1 := sequence.pop()
-			p1v, err := strconv.Atoi(p1)
-			if err != nil {
-				return nil, fmt.Errorf("except number after [ got " + p1)
-			}
 			// [a: or [a]
 			p2 := sequence.pop()
 			if p2 == ":" {
+				p1v, err := strconv.Atoi(p1)
+				if err != nil {
+					return nil, fmt.Errorf("except number after [ got " + p1)
+				}
 				// [a:b]
 				p3 := sequence.pop()
 				p3v, err := strconv.Atoi(p3)
@@ -157,15 +196,26 @@ func Compile(exp string) (*Compiled, error) {
 				}
 			}
 			if p2 == "]" {
-				s = step{
-					op:   index,
-					args: []interface{}{p1v},
+				if p1 == "*" {
+					s = step{
+						op: scan,
+					}
+				} else {
+					p1v, err := strconv.Atoi(p1)
+					if err != nil {
+						return nil, fmt.Errorf("except number or * after [ got " + p1)
+					}
+					s = step{
+						op:   index,
+						args: []interface{}{p1v},
+					}
 				}
+
 			}
 		}
 		steps = append(steps, &s)
 	}
-	return &Compiled{steps: steps}, nil
+	return &compiled{steps: steps}, nil
 }
 
 // $ .a .b [1] . c
@@ -175,7 +225,7 @@ func tokenize(exp string) (*tokenSequence, error) {
 	}
 	split := TokenSplit{Splits: defaultTokenSplits, SaveToken: true}
 
-	sequence := tokenSequence{tokens: split.Split2tokens(exp)}
+	sequence := tokenSequence{tokens: split.split2tokens(exp)}
 
 	return &sequence, nil
 }
@@ -212,7 +262,7 @@ func (t *TokenSplit) shouldSplit(c byte) bool {
 	return false
 }
 
-func (t *TokenSplit) Split2tokens(exp string) Tokens {
+func (t *TokenSplit) split2tokens(exp string) Tokens {
 	var currentToken []byte
 	var token = Tokens{}
 	for _, b := range []byte(exp) {
@@ -250,5 +300,3 @@ func (t *tokenSequence) back() {
 func (t *tokenSequence) hasNext() bool {
 	return t.cIndex < len(t.tokens)
 }
-
-func parseToken(exp string) {}

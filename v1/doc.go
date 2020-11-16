@@ -2,7 +2,7 @@ package v1
 
 // {project}/{module}/{group}/{user}/{resource_id}:{resource_attr}/{resource_attr}...
 // 允许用户查询组内的资源信息
-// Effect: Allow
+// Effect: Evaluate
 // Action: listPortPolicy
 // Resources: envc-platform/portPolicy/${user_group}/*/*
 

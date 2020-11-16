@@ -7,18 +7,20 @@ import (
 
 func TestResource_Evaluate(t *testing.T) {
 	ctx := Context{
-		User: map[string]interface{}{"group": "test", "name": "mmsuo"},
+		Requester: map[string]interface{}{"group": []string{"test", "test2"}, "name": "mmsuo"},
 	}
 
-	var r Resource = []string{"a:b:c/{$.user.group}", "a:b:c/{$.user.name}"}
-	r.evaluate(&ctx)
-
+	var r Resource = []string{"a:b:c/{$.requester.group}", "a:b:c/{$.requester.name}"}
+	err := r.evaluate(&ctx)
+	if err != nil {
+		t.Error(err)
+	}
 	fmt.Println(r)
 }
 
 func BenchmarkResource_Evaluate(b *testing.B) {
 	ctx := Context{
-		User: map[string]interface{}{"group": "test"},
+		Requester: map[string]interface{}{"group": "test"},
 	}
 	var r Resource = []string{"a:b:c/{$.user.group}"}
 	for i := 0; i < b.N; i++ {

@@ -12,7 +12,7 @@ package v1
 //    <resource_block>,
 //    <condition_block?>
 //}
-//<effect_block> = "Effect" : ("Allow" | "Deny")
+//<effect_block> = "Effect" : ("Evaluate" | "Deny")
 //<action_block> = "Action" :
 //    ("*" | [<action_string>, <action_string>, ...])
 //<resource_block> = "Resource" :
@@ -34,22 +34,20 @@ package v1
 //<condition_value> = ("String" | "Number" | "Boolean")
 
 type Policy struct {
-	Id         int          `json:"-"`
 	Version    Version     `json:"Version"`
 	Statements []*Statement `json:"Statements"`
 }
 
-//
-func (p *Policy) Allow(c *Context) (allow bool, match bool, err error) {
-	var m bool
-	for _, s := range p.Statements {
-		m, err = s.match(c)
+// 使用context 计算策略
+// allow 是否允许操作 match 是否匹配
+func (p *Policy) Evaluate(c *Context) (allow bool, match bool, err error) {
+	for _, statement := range p.Statements {
+		match, err = statement.match(c)
 		if err != nil {
 			break
 		}
-		if m {
-			match = true
-			if s.Effect == Deny {
+		if match {
+			if statement.Effect == Deny {
 				allow = false
 				break
 			}

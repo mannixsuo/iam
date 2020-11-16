@@ -23,19 +23,19 @@ func TestPolicy_Allow(t *testing.T) {
 		},
 	}
 	ctx := &Context{
-		Action:   "food:*",
-		User:     map[string]interface{}{"name": "tom"},
-		Resource: "tom:food:bread",
+		Action:    "food:*",
+		Requester: map[string]interface{}{"name": "tom"},
+		Resource:  "tom:food:bread",
 	}
 	ctx2 := &Context{
-		Action:   "toy:eat",
-		User:     map[string]interface{}{"name": "tom"},
-		Resource: "tom:toy:car",
+		Action:    "toy:eat",
+		Requester: map[string]interface{}{"name": "tom"},
+		Resource:  "tom:toy:car",
 	}
 
-	allow, m, err := p.Allow(ctx)
+	allow, m, err := p.Evaluate(ctx)
 	fmt.Println(allow, m, err)
-	a, b, err := p.Allow(ctx2)
+	a, b, err := p.Evaluate(ctx2)
 	fmt.Println(a, b, err)
 }
 
@@ -57,11 +57,11 @@ func BenchmarkPolicy_Allow(b *testing.B) {
 		},
 	}
 	ctx := &Context{
-		Action:   "food:*",
-		User:     map[string]interface{}{"name": "tom"},
-		Resource: "tom:food:bread",
+		Action:    "food:*",
+		Requester: map[string]interface{}{"name": "tom"},
+		Resource:  "tom:food:bread",
 	}
 	for i := 0; i < b.N; i++ {
-		p.Allow(ctx)
+		p.Evaluate(ctx)
 	}
 }

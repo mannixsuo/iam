@@ -5,5 +5,6 @@ package v1
 type Version uint8
 
 const (
+	V0 Version = 0
 	V1 Version = 1
 )

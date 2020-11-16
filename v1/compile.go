@@ -13,7 +13,7 @@ import (
 //	"user": {
 //		"name": "tom",
 //		"age": 1,
-//		"mother": "tomMather"
+//		"mother": "tomMother"
 //	},
 //	"role": {
 //		"name": "baby"
@@ -28,85 +28,95 @@ import (
 // {$.user.age}=1
 // {$.resource.owner}="tomMather"
 
-// a . b, a[b], a[b:c]
+// a . b, a[b], a[b:c], a[*]
 type op uint
 
 const (
-	value op = iota //a.b 某个对象的属性
-	split           //a[b:c] 切片
-	index           //a[b] list中的某个对象
-	scan            //todo a[*] 所有对象
+	value op = iota // a.b 某个对象的属性
+	slice           // a[b:c] 切片
+	index           // a[b] list中的某个对象
+	scan            // a[*] 所有对象
 )
 
 type step struct {
 	op   op
-	key  string // 属性的名称或者index
-	args []interface{}
+	key  string        // 属性的名称或者index
+	args []interface{} // 切片参数[a:b] args 就是a b
 }
 
+// 属性查找路径
+// a.b[c]
+// [
+//    {
+//        op  : value
+//        key : "b"
+//        args: nil
+//    },
+//    {
+//        op  : index
+//        key : ""
+//        args: c
+//    }
+// ]
 type compiled struct {
 	steps []*step
 }
 
+// 查找context中的属性
 func (c *compiled) lookup(context interface{}) (interface{}, error) {
-	var sc bool
 	for _, s := range c.steps {
 		var err error = nil
+		// a.b
 		if s.op == value {
-			// a[*].b
-			if sc {
-				context, err = getScanValues(context, s)
-				continue
-			}
-			context, err = getValue(context, s)
+			context, err = lookupByValue(context, s)
 			if err != nil {
 				return nil, err
 			}
 		}
+		// a[b] a[b:c]
 		if s.op == index {
-			context, err = getIndex(context, s)
+			context, err = lookupByIndex(context, s)
 			if err != nil {
 				return nil, err
 			}
 		}
+		// a[*]
 		if s.op == scan {
-			context, err = getScanValue(context, s)
+			context, err = lookupByScan(context, s)
 			if err != nil {
 				return nil, err
 			}
-			sc = true
 		}
 	}
 	return context, nil
 }
+
+// a:=[{k:1},{k:2}] --> a[*].k = [1,2]
 func getScanValues(c interface{}, s *step) (interface{}, error) {
-	var vs []interface{}
+	var values []interface{}
 	cv := reflect.ValueOf(c)
-	switch cv.Kind() {
-	case reflect.Array, reflect.Slice:
-		for i := 0; i < cv.Len(); i++ {
-			i2, err := getValue(cv.Index(i).Interface(), s)
-			if err != nil {
-				return nil, err
-			}
-			vs = append(vs, i2)
+	for i := 0; i < cv.Len(); i++ {
+		i2, err := lookupByValue(cv.Index(i).Interface(), s)
+		if err != nil {
+			return nil, err
 		}
-		return vs, nil
+		values = append(values, i2)
 	}
-	return nil, fmt.Errorf("cant get [*].%s from %s ", s.args[0], c)
-}
-func getScanValue(c interface{}, s *step) (interface{}, error) {
-	cv := reflect.ValueOf(c)
-	switch cv.Kind() {
-	case reflect.Slice:
-		return cv.Interface(), nil
-	case reflect.Array:
-		return cv.Interface(), nil
-	}
-	return nil, fmt.Errorf("not array or slice")
+	return values, nil
 }
 
-func getIndex(c interface{}, s *step) (interface{}, error) {
+// 返回scan后的结果
+// a:=[{k:1},{k:2}], a[*]=[{k:1},{k:2}]
+func lookupByScan(c interface{}, s *step) (interface{}, error) {
+	cv := reflect.ValueOf(c)
+	switch cv.Kind() {
+	case reflect.Slice | reflect.Array:
+		return cv.Interface(), nil
+	}
+	return nil, fmt.Errorf("can't get [*] from kind %s", cv.Kind())
+}
+
+func lookupByIndex(c interface{}, s *step) (interface{}, error) {
 	cv := reflect.ValueOf(c)
 	switch cv.Kind() {
 	case reflect.Array:
@@ -117,31 +127,38 @@ func getIndex(c interface{}, s *step) (interface{}, error) {
 		}
 		return cv.Index(s.args[0].(int)).Interface(), nil
 	case reflect.Ptr:
-		return getIndex(c, s)
+		return lookupByIndex(c, s)
 	}
 	return nil, fmt.Errorf("can't get value %s from Kind %s", s.key, cv.Kind().String())
 }
 
-//如果c是map,s.key作为map的key来获取值
-//如果c是结构体,s.key作为结构体属性名称或者属性的json tag定义的名称来取值
-func getValue(c interface{}, s *step) (interface{}, error) {
+// 根据s和c 计算值
+func lookupByValue(c interface{}, s *step) (interface{}, error) {
 	cv := reflect.ValueOf(c)
 	switch cv.Kind() {
+	//如果c是map,s.key作为map的key来获取值
 	case reflect.Map:
 		jsonMap := c.(map[string]interface{})
 		return jsonMap[s.key], nil
+	//如果c是结构体,s.key作为结构体属性名称或者属性的json tag定义的名称来取值
 	case reflect.Struct:
-		tag, err := getStructFileByFiledNameOrJsonTag(s.key, reflect.TypeOf(c))
+		fileName, err := getStructFileByFiledNameOrJsonTag(s.key, reflect.TypeOf(c))
 		if err != nil {
 			return nil, err
 		}
-		return cv.FieldByName(tag).Interface(), nil
+		return cv.FieldByName(fileName).Interface(), nil
+	// 如果c是指针 根据指针的地址再计算
 	case reflect.Ptr:
-		return getValue(cv.Elem().Interface(), s)
+		return lookupByValue(cv.Elem().Interface(), s)
+	// 如果c是数组或切片,返回每个元素的计算结果
+	case reflect.Array | reflect.Slice:
+		return getScanValues(c, s)
 	}
+
 	return nil, fmt.Errorf("can't get value %s from Kind %s", s.key, cv.Kind().String())
 }
 
+// 查询结构体的属性名称 如果没有根据n查到就根据json tag 来查
 func getStructFileByFiledNameOrJsonTag(n string, t reflect.Type) (string, error) {
 	// 首先根据名称查找
 	if field, find := t.FieldByName(n); find {
@@ -161,7 +178,7 @@ func compile(exp string) (*compiled, error) {
 	if err != nil {
 		return nil, err
 	}
-	steps := make([]*step, 0)
+	steps := make([]*step, 0, 10)
 	for sequence.hasNext() {
 		var s step
 		token := sequence.pop()
@@ -182,16 +199,16 @@ func compile(exp string) (*compiled, error) {
 			if p2 == ":" {
 				p1v, err := strconv.Atoi(p1)
 				if err != nil {
-					return nil, fmt.Errorf("except number after [ got " + p1)
+					return nil, fmt.Errorf("except a number after [ got " + p1)
 				}
 				// [a:b]
 				p3 := sequence.pop()
 				p3v, err := strconv.Atoi(p3)
 				if err != nil {
-					return nil, fmt.Errorf("except number after [: got " + p3)
+					return nil, fmt.Errorf("except a number after [: got " + p3)
 				}
 				s = step{
-					op:   split,
+					op:   slice,
 					args: []interface{}{p1v, p3v},
 				}
 			}
@@ -216,87 +233,4 @@ func compile(exp string) (*compiled, error) {
 		steps = append(steps, &s)
 	}
 	return &compiled{steps: steps}, nil
-}
-
-// $ .a .b [1] . c
-func tokenize(exp string) (*tokenSequence, error) {
-	if exp[0] != '$' {
-		return nil, fmt.Errorf("expression parser error: %s.expression should start with $", exp)
-	}
-	split := TokenSplit{Splits: defaultTokenSplits, SaveToken: true}
-
-	sequence := tokenSequence{tokens: split.split2tokens(exp)}
-
-	return &sequence, nil
-}
-
-// $ . a . b [ 1 ] . c
-type tokenSequence struct {
-	tokens Tokens //["$",".","a",".","b","[","1","]",".","c"]
-	cIndex int    //当前指针所在位置
-}
-
-type Tokens []string
-
-func (t *Tokens) append(s string) {
-	if s != "" {
-		*t = append(*t, s)
-	}
-}
-
-var defaultTokenSplits = []byte{byte('.'), byte('['), byte(']'), byte(':')}
-
-// 根据 Splits 来分割字符串
-type TokenSplit struct {
-	Splits    []byte
-	SaveToken bool //是否将分隔符也保存
-}
-
-// 判断是否分割
-func (t *TokenSplit) shouldSplit(c byte) bool {
-	for _, s := range t.Splits {
-		if s == c {
-			return true
-		}
-	}
-	return false
-}
-
-func (t *TokenSplit) split2tokens(exp string) Tokens {
-	var currentToken []byte
-	var token = Tokens{}
-	for _, b := range []byte(exp) {
-		if t.shouldSplit(b) {
-			// 保存分隔符前的token,以及分割符
-			token.append(string(currentToken))
-			if t.SaveToken {
-				token.append(string(b))
-			}
-			currentToken = make([]byte, 0)
-			continue
-		}
-		currentToken = append(currentToken, b)
-	}
-	// 保存最后一个token
-	token.append(string(currentToken))
-	return token
-}
-
-// 返回队列最前面的元素
-func (t *tokenSequence) pop() (token string) {
-	token = t.tokens[t.cIndex]
-	if t.hasNext() {
-		t.cIndex++
-	}
-	return
-}
-
-// 回退一步
-func (t *tokenSequence) back() {
-	t.cIndex--
-}
-
-// 是否还剩token未读取
-func (t *tokenSequence) hasNext() bool {
-	return t.cIndex < len(t.tokens)
 }

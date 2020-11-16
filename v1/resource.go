@@ -5,14 +5,24 @@ import (
 	"strings"
 )
 
+const (
+	openBraces    = "{"
+	closeBraces   = "}"
+	openBrackets  = '['
+	closeBrackets = ']'
+	colon         = ":"
+	period        = "."
+	asterisk      = "*"
+)
+
 // * or  ["acs:ecs:*:*:instance/inst-001", "acs:ecs:*:*:instance/inst-002", "acs:oss:*:*:mybucket", "acs:oss:*:*:mybucket/*"]
 // string or []string
 
 type Resource []string
 
 //AllResources 判断这个Resource是不是代表了所有资源
-func (r *Resource) all() bool {
-	if len(*r) == 1 && (*r)[0] == allToken {
+func (r *Resource) matchAll() bool {
+	if len(*r) == 1 && (*r)[0] == asterisk {
 		return true
 	}
 	return false
@@ -20,7 +30,7 @@ func (r *Resource) all() bool {
 
 // 资源是否和context中的匹配
 func (r *Resource) match(c *Context) (bool, error) {
-	if r.all() {
+	if r.matchAll() {
 		return true, nil
 	}
 	err := r.evaluate(c)
@@ -33,7 +43,7 @@ func (r *Resource) match(c *Context) (bool, error) {
 	return false, nil
 }
 
-var sp = TokenSplit{
+var tokenSplit = TokenSplit{
 	Splits:    []byte{':', '/'},
 	SaveToken: false,
 }
@@ -43,20 +53,40 @@ var saveTokenSp = TokenSplit{
 	SaveToken: true,
 }
 
+type CompiledResource struct {
+	Compiled []Tokens
+}
+
 // 将 resource 中带有 {} 的计算出来
 func (r *Resource) evaluate(c *Context) error {
 	for i, rs := range *r {
-		tokens := saveTokenSp.split2tokens(rs)
-		for j, t := range tokens {
-			s, err := evaluate(t, c)
-			if err != nil {
-				return err
-			}
-			tokens[j] = s
+		if !containBrace(rs) {
+			continue
 		}
-		(*r)[i] = join(tokens)
+		// 分割资源字符串
+		tokens := saveTokenSp.splitExpression(rs)
+		for _, token := range tokens {
+			if isExpression(token) {
+				s, err := evaluate(token, c)
+				if err != nil {
+					return err
+				}
+				(*r)[i] = strings.ReplaceAll((*r)[i], token, fmt.Sprint(s))
+			}
+		}
 	}
 	return nil
+}
+
+func containBrace(resource string) bool {
+	return strings.Contains(resource, openBraces)
+}
+
+func isExpression(exp string) bool {
+	if len(exp) > 0 && exp[0] == '{' && exp[len(exp)-1] == '}' {
+		return true
+	}
+	return false
 }
 
 func join(s []string) string {
@@ -68,53 +98,63 @@ func join(s []string) string {
 }
 
 // 计算token的实际值 返回是查询到的对象在fmt.sprint中的格式
-func evaluate(token string, c *Context) (string, error) {
-	tl := len(token)
+func evaluate(token string, c *Context) (interface{}, error) {
 	//{$.a.b.c}
-	if token[0] == '{' && token[tl-1] == '}' {
-		compile, err := compile(token[1 : tl-1])
-		if err != nil {
-			return "", err
-		}
-		lookup, err := compile.lookup(c)
-		if err != nil {
-			return "", err
-		}
-		return fmt.Sprint(lookup), nil
+	compile, err := compile(token[1 : len(token)-1])
+	if err != nil {
+		return "", err
 	}
-	return token, nil
+	lookup, err := compile.lookup(c)
+	if err != nil {
+		return "", err
+	}
+	return lookup, nil
+
 }
 
-func match0(p []string, r string) bool {
-	rs := sp.split2tokens(r)
-	for _, ps := range p {
-		if match(sp.split2tokens(ps), rs) {
+// 判断rules中的规则是否匹配 target
+func match0(rules []string, target string) bool {
+	tokens := tokenSplit.splitExpression(target)
+	for _, rule := range rules {
+		if match(tokenSplit.splitExpression(rule), tokens) {
 			return true
 		}
 	}
 	return false
 }
 
-func match(p []string, r []string) bool {
-	pl := len(p) - 1
-	rl := len(r) - 1
-	// p  a:b:c:*
-	// r  a:b
+// 判断规则rule 是否匹配规则 target
+func match(rule []string, target []string) bool {
+	// rule    a:b:c:*
+	// target  a:b
 	// false
-	if rl < pl {
+	// 说明target的权限 比rule中的权限要高
+	if len(target) < len(rule) {
 		return false
 	}
-	for i, ps := range p {
+	for i, ps := range rule {
+		if ps == target[i] {
+			continue
+		}
+		// * 匹配任何值
 		if ps == "*" {
 			continue
 		}
-		if ps == r[i] {
-			continue
+		//[a b c]
+		if isListString(ps) {
+			if strings.Contains(ps, target[i]) {
+				continue
+			}
 		}
 		return false
 	}
-	// p a:b:c
-	// r a:b:c or a:b:c:d
+	// rule a:b:c
+	// target a:b:c or a:b:c:d
 	// true
+	// 权限匹配或者是target权限比rule低
 	return true
+}
+
+func isListString(s string) bool {
+	return len(s) > 2 && s[0] == openBrackets && s[len(s)-1] == closeBrackets
 }

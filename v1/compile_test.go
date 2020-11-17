@@ -6,15 +6,16 @@ import (
 )
 
 func TestTokens_equals(t *testing.T) {
-	tokens := Tokens([]string{})
+	s := ""
+	tokens := Tokens{stringPointer: &s}
 	if !tokens.equals([]string{}) {
 		t.Error()
 	}
-	tokens = []string{"a"}
+	s = "a"
 	if !tokens.equals([]string{"a"}) {
 		t.Error()
 	}
-	tokens = []string{"a", "b"}
+	s = "ab"
 	if !tokens.equals([]string{"a", "b"}) {
 		t.Error()
 	}

@@ -38,8 +38,9 @@ type Policy struct {
 	Statements []*Statement `json:"Statements"`
 }
 
-// 使用context 计算策略
-// allow代表是否允许本次操作, match代表policy中的资源和操作与context中的资源与操作是否匹配
+// evaluate by context
+// allow: represent this policy allow actions in context
+// match: represent action and resource in policy statements match these in context
 func (p *Policy) Evaluate(c *Context) (allow bool, match bool, err error) {
 	for _, statement := range p.Statements {
 		statementMatch, err := statement.match(c)

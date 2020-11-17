@@ -2,15 +2,14 @@ package v1
 
 import "fmt"
 
-// tokenSequence 代表分割后的token队列
-// 比如 $ . a . b [ 1 ] . c
+// like $ . a . b [ 1 ] . c
 type tokenSequence struct {
 	tokens Tokens //["$",".","a",".","b","[","1","]",".","c"]
-	cIndex int    //当前指针所在位置
+	cIndex int    //current index
 }
 
-// 使用defaultTokenSplits 将表达式exp进行分割
-// $ .a .b [1] . c
+// split exp by defaultTokenSplits
+// $.a.b[1].c => $ . a . b [ 1 ] . c
 func tokenize(exp string) (*tokenSequence, error) {
 	if exp[0] != '$' {
 		return nil, fmt.Errorf("expression parser error: %s.expression should start with $", exp)
@@ -48,13 +47,13 @@ func (t Tokens) equals(other []string) bool {
 
 var defaultTokenSplits = []byte{byte('.'), byte('['), byte(']'), byte(':')}
 
-// 根据 Splits 来分割字符串
+// TokenSplit is used for split string in tokens by Splits
 type TokenSplit struct {
 	Splits    []byte
-	SaveToken bool //是否将分隔符也保存
+	SaveToken bool // save token when split string
 }
 
-// 判断是否分割
+// check whether split the char c
 func (t *TokenSplit) shouldSplit(c byte) bool {
 	for _, s := range t.Splits {
 		if s == c {
@@ -64,29 +63,29 @@ func (t *TokenSplit) shouldSplit(c byte) bool {
 	return false
 }
 
-// 根据 TokenSplit 的splits字符分割字符串
+// split exp by splits in tokenSplit
 func (t *TokenSplit) splitExpression(exp string) Tokens {
 	expLen := len(exp)
 	var token = Tokens{stringPointer: &exp, split: make([][2]int, 0, expLen)}
 	bottom := 0
 	for head := 0; head < expLen; head++ {
 		if t.shouldSplit(exp[head]) {
-			// 保存分隔符前的token
+			// save token before
 			token.append(bottom, head)
-			// 保存分隔符
+			// save split token
 			if t.SaveToken {
 				token.append(head, head+1)
 			}
-			// 重置token起始位置
+			// reset token start index
 			bottom = head + 1
 		}
 	}
-	// 保存最后一个token
+	// save the last token
 	token.append(bottom, expLen)
 	return token
 }
 
-// 返回队列最前面的元素
+// return the element on the top of tokenSequence
 func (t *tokenSequence) pop() (token string) {
 	token = (*(t.tokens.stringPointer))[t.tokens.split[t.cIndex][0]:t.tokens.split[t.cIndex][1]]
 	if t.hasNext() {
@@ -95,12 +94,11 @@ func (t *tokenSequence) pop() (token string) {
 	return
 }
 
-// 回退一步
+// back
 func (t *tokenSequence) back() {
 	t.cIndex--
 }
 
-// 是否还剩token未读取
 func (t *tokenSequence) hasNext() bool {
 	return t.cIndex < len(t.tokens.split)
 }

@@ -6,7 +6,7 @@ import (
 	"strconv"
 )
 
-// compile 根据表达式和context 来计算结果
+// compile use expression and context evaluate the result
 // example:
 // context:
 //{
@@ -32,37 +32,24 @@ import (
 type op uint
 
 const (
-	value op = iota // a.b 某个对象的属性
-	slice           // a[b:c] 切片
-	index           // a[b] list中的某个对象
-	scan            // a[*] 所有对象
+	value op = iota // a.b
+	slice           // a[b:c]
+	index           // a[b]
+	scan            // a[*]
 )
 
 type step struct {
 	op   op
-	key  string        // 属性的名称或者index
-	args []interface{} // 切片参数[a:b] args 就是a b
+	key  string        // context's value key or index of array
+	args []interface{} // arguments of slice if [a:b] args is [a,b]
 }
 
-// 属性查找路径
-// a.b[c]
-// [
-//    {
-//        op  : value
-//        key : "b"
-//        args: nil
-//    },
-//    {
-//        op  : index
-//        key : ""
-//        args: c
-//    }
-// ]
+// object look path
 type compiled struct {
 	steps []*step
 }
 
-// 查找context中的属性
+// lookup the value in context
 func (c *compiled) lookup(context interface{}) (interface{}, error) {
 	for _, s := range c.steps {
 		var err error = nil
@@ -105,8 +92,7 @@ func getScanValues(c interface{}, s *step) (interface{}, error) {
 	return values, nil
 }
 
-// 返回scan后的结果
-// a:=[{k:1},{k:2}], a[*]=[{k:1},{k:2}]
+// a=[{k:1},{k:2}], a[*]=[{k:1},{k:2}]
 func lookupByScan(c interface{}, s *step) (interface{}, error) {
 	cv := reflect.ValueOf(c)
 	switch cv.Kind() {
@@ -132,25 +118,24 @@ func lookupByIndex(c interface{}, s *step) (interface{}, error) {
 	return nil, fmt.Errorf("can't get value %s from Kind %s", s.key, cv.Kind().String())
 }
 
-// 根据s和c 计算值
+// return the value of `.` value operation
 func lookupByValue(c interface{}, s *step) (interface{}, error) {
 	cv := reflect.ValueOf(c)
 	switch cv.Kind() {
-	//如果c是map,s.key作为map的key来获取值
+	// if c is a map[string]interface{} return value of c[s.key]
 	case reflect.Map:
 		jsonMap := c.(map[string]interface{})
 		return jsonMap[s.key], nil
-	//如果c是结构体,s.key作为结构体属性名称或者属性的json tag定义的名称来取值
+	// if c is a struct use s.key as struct's field name or fields json tag
 	case reflect.Struct:
 		fileName, err := getStructFileByFiledNameOrJsonTag(s.key, reflect.TypeOf(c))
 		if err != nil {
 			return nil, err
 		}
 		return cv.FieldByName(fileName).Interface(), nil
-	// 如果c是指针 根据指针的地址再计算
 	case reflect.Ptr:
 		return lookupByValue(cv.Elem().Interface(), s)
-	// 如果c是数组或切片,返回每个元素的计算结果
+	// if c is array or slice return every item in c computed by s
 	case reflect.Array | reflect.Slice:
 		return getScanValues(c, s)
 	}
@@ -158,13 +143,12 @@ func lookupByValue(c interface{}, s *step) (interface{}, error) {
 	return nil, fmt.Errorf("can't get value %s from Kind %s", s.key, cv.Kind().String())
 }
 
-// 查询结构体的属性名称 如果没有根据n查到就根据json tag 来查
 func getStructFileByFiledNameOrJsonTag(n string, t reflect.Type) (string, error) {
-	// 首先根据名称查找
+	// get value by name
 	if field, find := t.FieldByName(n); find {
 		return field.Name, nil
 	}
-	// 根据json tag查找
+	// get value by json tag
 	for i := 0; i < t.NumField(); i++ {
 		if v, ok := t.Field(i).Tag.Lookup("json"); ok && v == n {
 			return t.Field(i).Name, nil

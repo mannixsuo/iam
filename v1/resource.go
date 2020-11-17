@@ -15,12 +15,9 @@ const (
 	asterisk      = "*"
 )
 
-// * or  ["acs:ecs:*:*:instance/inst-001", "acs:ecs:*:*:instance/inst-002", "acs:oss:*:*:mybucket", "acs:oss:*:*:mybucket/*"]
-// string or []string
-
 type Resource []string
 
-//AllResources 判断这个Resource是不是代表了所有资源
+//AllResources check whether this resource match all resources
 func (r *Resource) matchAll() bool {
 	if len(*r) == 1 && (*r)[0] == asterisk {
 		return true
@@ -28,7 +25,7 @@ func (r *Resource) matchAll() bool {
 	return false
 }
 
-// 资源是否和context中的匹配
+// check whether resource math resource in context
 func (r *Resource) match(c *Context) (bool, error) {
 	if r.matchAll() {
 		return true, nil
@@ -57,13 +54,12 @@ type CompiledResource struct {
 	Compiled []Tokens
 }
 
-// 将 resource 中带有 {} 的计算出来
 func (r *Resource) evaluate(c *Context) error {
 	for i, rs := range *r {
 		if !containBrace(rs) {
 			continue
 		}
-		// 分割资源字符串
+		// split resource string into tokens
 		tokens := saveTokenSp.splitExpression(rs)
 		for _, split := range tokens.split {
 			if isExpression((*tokens.stringPointer)[split[0]:split[1]]) {
@@ -89,7 +85,7 @@ func isExpression(exp string) bool {
 	return false
 }
 
-// 计算token的实际值 返回是查询到的对象在fmt.sprint中的格式
+// use context evaluate the value represented by token
 func evaluate(token string, c *Context) (interface{}, error) {
 	//{$.a.b.c}
 	compile, err := compile(token[1 : len(token)-1])
@@ -104,7 +100,7 @@ func evaluate(token string, c *Context) (interface{}, error) {
 
 }
 
-// 判断rules中的规则是否匹配 target
+// check whether some rule in rules match target
 func match0(rules []string, target string) bool {
 	tokens := tokenSplit.splitExpression(target)
 	for _, rule := range rules {
@@ -115,25 +111,27 @@ func match0(rules []string, target string) bool {
 	return false
 }
 
-// 判断规则rule 是否匹配规则 target
+// check whether rule match target
 func match(rule Tokens, target Tokens) bool {
 
-	// rule    a:b:c:*
-	// target  a:b
-	// false
-	// 说明target的权限 比rule中的权限要高
+	// if rule is    a:b:c:*
+	// and target is a:b
+	// return false
+	// authority requested in target is higher than authority in rule
 	if len(target.split) < len(rule.split) {
 		return false
 	}
 	for i, ps := range rule.split {
+		// equal
 		if (*rule.stringPointer)[ps[0]:ps[1]] == (*target.stringPointer)[target.split[i][0]:target.split[i][1]] {
 			continue
 		}
-		// * 匹配任何值
+		// * match anything
+		// /a/*/b match a/c/b , a/d/b ..
 		if (*rule.stringPointer)[ps[0]:ps[1]] == "*" {
 			continue
 		}
-		//[a b c]
+		//[a b c] match a , b, c
 		if isListString((*rule.stringPointer)[ps[0]:ps[1]]) {
 			if strings.Contains((*rule.stringPointer)[ps[0]:ps[1]], (*target.stringPointer)[ps[0]:ps[1]]) {
 				continue
@@ -144,7 +142,7 @@ func match(rule Tokens, target Tokens) bool {
 	// rule a:b:c
 	// target a:b:c or a:b:c:d
 	// true
-	// 权限匹配或者是target权限比rule低
+	// authority requested in target is lower than authority in rule
 	return true
 }
 

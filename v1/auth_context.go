@@ -4,7 +4,7 @@ package v1
 // such as requester want do action to resource with condition
 type Context struct {
 	Action    string                 `json:"action"`
-	Requester map[string]interface{} `json:"requester"`
+	Requester interface{} `json:"requester"`
 	Resource  string                 `json:"resource"`
 	Condition map[string]interface{} `json:"condition"`
 }

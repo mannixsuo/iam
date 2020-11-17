@@ -89,14 +89,6 @@ func isExpression(exp string) bool {
 	return false
 }
 
-func join(s []string) string {
-	sb := strings.Builder{}
-	for _, ss := range s {
-		sb.WriteString(ss)
-	}
-	return sb.String()
-}
-
 // 计算token的实际值 返回是查询到的对象在fmt.sprint中的格式
 func evaluate(token string, c *Context) (interface{}, error) {
 	//{$.a.b.c}

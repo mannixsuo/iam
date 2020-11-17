@@ -12,18 +12,18 @@ func TestPolicy_Allow(t *testing.T) {
 		Statements: []*Statement{
 			{
 				Action:   &Action{"food:eat"},
-				Resource: &Resource{"{$.user.name}:food:*"},
+				Resource: &Resource{"{$.requester.name}:food:*"},
 				Effect:   Allow,
 			},
 			{
 				Action:   &Action{"toy:eat"},
-				Resource: &Resource{"{$.user.name}:toy:*"},
+				Resource: &Resource{"{$.requester.name}:toy:*"},
 				Effect:   Deny,
 			},
 		},
 	}
 	ctx := &Context{
-		Action:    "food:*",
+		Action:    "food:eat",
 		Requester: map[string]interface{}{"name": "tom"},
 		Resource:  "tom:food:bread",
 	}

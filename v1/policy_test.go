@@ -46,12 +46,12 @@ func BenchmarkPolicy_Allow(b *testing.B) {
 		Statements: []*Statement{
 			{
 				Action:   &Action{"food:eat"},
-				Resource: &Resource{"{$.user.name}:food:*"},
+				Resource: &Resource{"{$.requester.name}:food:*"},
 				Effect:   Allow,
 			},
 			{
 				Action:   &Action{"toy:eat"},
-				Resource: &Resource{"{$.user.name}:toy:*"},
+				Resource: &Resource{"{$.requester.name}:toy:*"},
 				Effect:   Deny,
 			},
 		},

@@ -22,18 +22,22 @@ func tokenize(exp string) (*tokenSequence, error) {
 	return &sequence, nil
 }
 
-type Tokens []string
+type Tokens struct {
+	stringPointer *string
+	split         [][2]int
+}
 
-func (t *Tokens) append(s string) {
-	if s != "" {
-		*t = append(*t, s)
+func (t *Tokens) append(bottom, head int) {
+	if bottom == head {
+		return
 	}
+	t.split = append(t.split, [2]int{bottom, head})
 }
 
 func (t Tokens) equals(other []string) bool {
-	if len(t) == len(other) {
+	if len(t.split) == len(other) {
 		for i := 0; i < len(other); i++ {
-			if t[i] != other[i] {
+			if ((*(t.stringPointer))[t.split[i][0]:t.split[i][1]]) != other[i] {
 				return false
 			}
 		}
@@ -62,29 +66,29 @@ func (t *TokenSplit) shouldSplit(c byte) bool {
 
 // 根据 TokenSplit 的splits字符分割字符串
 func (t *TokenSplit) splitExpression(exp string) Tokens {
-	var token = Tokens{}
 	expLen := len(exp)
+	var token = Tokens{stringPointer: &exp, split: make([][2]int, 0, expLen)}
 	bottom := 0
 	for head := 0; head < expLen; head++ {
 		if t.shouldSplit(exp[head]) {
 			// 保存分隔符前的token
-			token.append(exp[bottom:head])
+			token.append(bottom, head)
 			// 保存分隔符
 			if t.SaveToken {
-				token.append(exp[head : head+1])
+				token.append(head, head+1)
 			}
 			// 重置token起始位置
 			bottom = head + 1
 		}
 	}
 	// 保存最后一个token
-	token.append(exp[bottom:expLen])
+	token.append(bottom, expLen)
 	return token
 }
 
 // 返回队列最前面的元素
 func (t *tokenSequence) pop() (token string) {
-	token = t.tokens[t.cIndex]
+	token = (*(t.tokens.stringPointer))[t.tokens.split[t.cIndex][0]:t.tokens.split[t.cIndex][1]]
 	if t.hasNext() {
 		t.cIndex++
 	}
@@ -98,5 +102,5 @@ func (t *tokenSequence) back() {
 
 // 是否还剩token未读取
 func (t *tokenSequence) hasNext() bool {
-	return t.cIndex < len(t.tokens)
+	return t.cIndex < len(t.tokens.split)
 }

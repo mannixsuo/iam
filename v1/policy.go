@@ -34,24 +34,27 @@ package v1
 //<condition_value> = ("String" | "Number" | "Boolean")
 
 type Policy struct {
-	Version    Version     `json:"Version"`
+	Version    Version      `json:"Version"`
 	Statements []*Statement `json:"Statements"`
 }
 
 // 使用context 计算策略
-// allow 是否允许操作 match 是否匹配
+// allow代表是否允许本次操作, match代表policy中的资源和操作与context中的资源与操作是否匹配
 func (p *Policy) Evaluate(c *Context) (allow bool, match bool, err error) {
 	for _, statement := range p.Statements {
-		match, err = statement.match(c)
+		statementMatch, err := statement.match(c)
 		if err != nil {
 			break
 		}
-		if match {
+		if statementMatch {
+			match = true
 			if statement.Effect == Deny {
 				allow = false
 				break
 			}
-			allow = true
+			if statement.Effect == Allow {
+				allow = true
+			}
 		}
 	}
 	return allow, match, err

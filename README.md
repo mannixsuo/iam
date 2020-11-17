@@ -27,7 +27,16 @@ Resource字符串支持根据context动态计算, `$` 代表context `$.resuester
 }
 ```
 
-policy 代表`什么人` `能不能` `对哪些资源` `进行哪些操作`
+policy 代表 `能不能` `对哪些资源` `进行哪些操作`
+
+### policy基本元素
+
+|元素名称|描述|
+|:----|:----|
+|效力（Effect）|	授权效力包括两种：允许（Allow）和拒绝（Deny）。|
+|操作（Action）|	操作是指对具体资源的操作。|
+|资源（Resource）|	资源是指被授权的具体对象。|
+|限制条件（Condition）|	限制条件是指授权生效的限制条件。|
 
 比如 定义一个策略，每个人只能吃自己的食物
 
@@ -46,7 +55,43 @@ policy
 }
 ```
 
+代码示例：
 
+```go 
+// 定义一个policy 能吃自己的食物
+   p := Policy{
+		Version: 1,
+		Statements: []*Statement{
+			{
+				Action:   &Action{"food:eat"},
+				Resource: &Resource{"{$.requester.name}:food:*"},
+				Effect:   Allow,
+			}
+		},
+	}
+	ctx := &Context{
+		Action:    "food:eat",
+		Requester: map[string]interface{}{"name": "tom"},
+		Resource:  "tom:food:bread",
+	}
+    ctx := &Context{
+		Action:    "food:eat",
+		Requester: map[string]interface{}{"name": "tom"},
+		Resource:  "jerry:food:bread",
+	}
+	allow, match, err := p.Evaluate(ctx)
+    fmt.Println(allow, match, err)
+    allow, match, err = p.Evaluate(ctx)
+    fmt.Println(allow, match, err)
+
+output:
+--------------
+true true <nil>
+false false <nil>
+
+```
+
+这里只是进行了权限判断,权限具体赋予在个人还是角色还是用户组上需要自己定义
 
 ## 权限判断的基本规则
 

@@ -12,10 +12,12 @@ func TestTokens_equals(t *testing.T) {
 		t.Error()
 	}
 	s = "a"
+	tokens.split = [][2]int{{0, 1}}
 	if !tokens.equals([]string{"a"}) {
 		t.Error()
 	}
 	s = "ab"
+	tokens.split = [][2]int{{0, 1},{1, 2}}
 	if !tokens.equals([]string{"a", "b"}) {
 		t.Error()
 	}

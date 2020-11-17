@@ -65,13 +65,13 @@ func (r *Resource) evaluate(c *Context) error {
 		}
 		// 分割资源字符串
 		tokens := saveTokenSp.splitExpression(rs)
-		for _, token := range tokens {
-			if isExpression(token) {
-				s, err := evaluate(token, c)
+		for _, split := range tokens.split {
+			if isExpression((*tokens.stringPointer)[split[0]:split[1]]) {
+				s, err := evaluate((*tokens.stringPointer)[split[0]:split[1]], c)
 				if err != nil {
 					return err
 				}
-				(*r)[i] = strings.ReplaceAll((*r)[i], token, fmt.Sprint(s))
+				(*r)[i] = strings.ReplaceAll((*r)[i], (*tokens.stringPointer)[split[0]:split[1]], fmt.Sprint(s))
 			}
 		}
 	}
@@ -116,25 +116,26 @@ func match0(rules []string, target string) bool {
 }
 
 // 判断规则rule 是否匹配规则 target
-func match(rule []string, target []string) bool {
+func match(rule Tokens, target Tokens) bool {
+
 	// rule    a:b:c:*
 	// target  a:b
 	// false
 	// 说明target的权限 比rule中的权限要高
-	if len(target) < len(rule) {
+	if len(target.split) < len(rule.split) {
 		return false
 	}
-	for i, ps := range rule {
-		if ps == target[i] {
+	for i, ps := range rule.split {
+		if (*rule.stringPointer)[ps[0]:ps[1]] == (*target.stringPointer)[target.split[i][0]:target.split[i][1]] {
 			continue
 		}
 		// * 匹配任何值
-		if ps == "*" {
+		if (*rule.stringPointer)[ps[0]:ps[1]] == "*" {
 			continue
 		}
 		//[a b c]
-		if isListString(ps) {
-			if strings.Contains(ps, target[i]) {
+		if isListString((*rule.stringPointer)[ps[0]:ps[1]]) {
+			if strings.Contains((*rule.stringPointer)[ps[0]:ps[1]], (*target.stringPointer)[ps[0]:ps[1]]) {
 				continue
 			}
 		}
